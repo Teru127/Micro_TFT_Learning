@@ -1,0 +1,15 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# RL logs, monitor data, and saved model weights
+logs/
+*.zip
+*.csv
+monitor.csv
+tensorboard_logs/
