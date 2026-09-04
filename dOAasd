@@ -1,3 +1,0 @@
-[33m2371b80[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m feat: TinyArenaEnv + check_env pass
-[33me5619b4[m[33m ([m[1;31morigin/main[m[33m)[m feat(p1): train PPO on CartPole with evaluation, logs, and plotting
-[33m7d2a257[m feat(p0): implement tabular Q-learning self-play on tic-tac-toe
