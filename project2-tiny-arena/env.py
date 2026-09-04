@@ -27,7 +27,7 @@ class TinyArenaEnv(gym.Env):
         )
         self.turn = 0
         return self._get_obs(), {}
-
+ 
     def step(self, action):
         opp_action = int(self.np_random.integers(0, 2))
         self.state = take_turn(self.state, int(action), opp_action)
