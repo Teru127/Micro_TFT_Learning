@@ -27,14 +27,27 @@ class TinyArenaEnv(gym.Env):
         )
         self.turn = 0
         return self._get_obs(), {}
- 
+
     def step(self, action):
+        #reward optimizes: win fast with minimal damage taken (win +10, lose -10, draw 0, -0.1 per turn)
         opp_action = int(self.np_random.integers(0, 2))
         self.state = take_turn(self.state, int(action), opp_action)
         self.turn += 1
-        terminated = not self.state.agent.is_alive or not self.state.opp.is_alive
+        a_alive, b_alive = self.state.agent.is_alive, self.state.opp.is_alive
+        terminated = not a_alive or not b_alive
         truncated = self.turn >= 50 and not terminated
-        return self._get_obs(), 0.0, terminated, truncated, {}
+        if terminated:
+            if not a_alive and not b_alive:
+                reward = 0.0  # draw
+            elif a_alive:
+                reward = 10.0  # agent wins
+            else:
+                reward = -10.0  # opponent wins
+        else:
+            reward = -0.1  # small penalty for each turn to encourage faster wins
+            if truncated:
+                reward = 0.0  # no reward for draw
+        return self._get_obs(), reward, terminated, truncated, {}
     
 if __name__ == "__main__":
     from stable_baselines3.common.env_checker import check_env
