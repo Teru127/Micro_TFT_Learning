@@ -18,7 +18,7 @@ env you write  ->  PPO / tabular RL  ->  self-play  ->  scaled TFT
 | 0 | Tabular Q-learning, Tic-Tac-Toe | done |
 | 1 | PPO on CartPole | done |
 | 2 | TinyArena, first custom Gym env | done |
-| 3 | Spatial board, positioning | in progress |
+| 3 | Spatial board, positioning | done |
 | 4 | Economy layer | planned |
 | 5 | Multi-agent self-play | planned |
 | 6 | Scale to full TFT | planned |
@@ -89,17 +89,25 @@ Add a 3x4 board so **where you place** becomes the decision.
 | File | Purpose |
 |---|---|
 | `board.py` | grid, `can_place`, immutable `place`, `print_board` |
-| `combat_spatial.py` | `spatial_damage` with a row factor (back row takes `0.85x` with jitter) |
-| `play_game.py` | random placement, then combat to death |
+| `combat_spatial.py` | `spatial_damage` with a row factor (back row takes `0.85x` with jitter), injectable rng |
+| `env.py` | `TinyArenaEnv`, one placement action, full fight simulated in `step` |
+| `test_env.py` | Gym contract, seeding, reward mapping (5 tests) |
+| `ppo_pipeline_test.py` | PPO run plus brute-force per-cell oracle comparison |
+| `play_game.py` | standalone sim and tabular position learner |
 
-**Teaches:** state representation for spatial problems, and why the signal must exist in the environment *before* an agent can learn to exploit it.
+**Teaches:** state representation for spatial problems, why the signal must exist in the environment before an agent can exploit it, and how to validate a learned policy when ground truth is computable.
 
-**Verified so far:**
+**Verified:**
 
 * Position matters. Back row wins **86.4%** vs front row with randomized stats (`864/1000`).
-* Random placement is unbiased. **41.6% / 38.8% / 19.6% draw**. Draws run high because damage resolves simultaneously.
+* `check_env` passes, 5 env tests pass, and seeds reproduce identical fights.
+* **Oracle vs PPO.** With 300 paired-seed games per cell, the brute-force per-cell reward table is:
+  `(2,3) 0.427, (2,1) 0.427, (2,2) 0.400, (2,0) 0.320` then rows 0-1 around `0.29-0.31`, and all three distance-1 non-back cells tied at `0.080`.
+* PPO (20k steps) put `0.483` on `(2,3)`, `0.238` on `(2,1)`, `0.135` on `(2,2)`. **Its top 4 and bottom 3 match the oracle exactly**: it learned "back row, and stay away from the bot's range-1 reach."
 
-**Ships, not yet:** an agent whose placement heatmap is visibly backline-biased against a uniform random one.
+**Note:** the episode is a single decision with a constant observation, so this env is effectively a bandit. The oracle solves it optimally; PPO's role was proving the env is Stable-Baselines3 compatible before Project 4.
+
+![PPO pipeline test curve](project3-spatial-board/ppo_pipeline_output/training_curve.png)
 
 ---
 
@@ -122,6 +130,8 @@ python project1-cartpole-ppo\cartpole_ppo.py
 python project2-tiny-arena\train.py
 python project2-tiny-arena\plot.py
 python project3-spatial-board\test_board.py
+python project3-spatial-board\test_env.py
+python project3-spatial-board\ppo_pipeline_test.py
 ```
 
 ## Notes

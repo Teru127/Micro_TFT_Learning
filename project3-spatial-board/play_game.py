@@ -1,65 +1,99 @@
-from board import Unit, make_board, can_place, place, print_board
-from combat_spatial import spatial_damage
+from collections import deque
 import random
 
-
-def place_a(board, unit, r, c):
-    b = place(board, unit, r, c)
-    return b
-
-
-def place_b(board, unit, r, c):
-    b = place(board, unit, r, c)
-    return b
+from env import (
+    BOT_ATTACK_RANGE,
+    BOT_START,
+    PLAYER_ATTACK_RANGE,
+    TinyArenaEnv,
+)
 
 
-# combat (read r, c) from the board to compute spatial damage
-def combat(board, atk, armor, attacker_r, attacker_c, defender_r, defender_c):
-    if board[attacker_r][attacker_c] is None or board[defender_r][defender_c] is None:
-        return None
-    damage = spatial_damage(atk, armor, attacker_r, defender_r)
-    return damage
+def train_position_learner(
+    total_games=5000,
+    epsilon=0.15,
+    player_attack_range=PLAYER_ATTACK_RANGE,
+    bot_attack_range=BOT_ATTACK_RANGE,
+):
+    # Treat each legal starting cell as an action and learn its average reward.
+    env = TinyArenaEnv(
+        player_attack_range=player_attack_range,
+        bot_attack_range=bot_attack_range,
+    )
+    positions = env.player_positions
+    action_for_position = {
+        position: action for action, position in enumerate(positions)
+    }
+    values = {position: 0.0 for position in positions}
+    counts = {position: 0 for position in positions}
+    records = {position: {"A": 0, "B": 0, "draw": 0} for position in positions}
+    recent_rewards = deque(maxlen=100)
+    learning_curve = []
 
+    for _ in range(total_games):
+        # Try every cell once before choosing the current best most of the time.
+        untried = [position for position in positions if counts[position] == 0]
+        if untried:
+            player_position = random.choice(untried)
+        elif random.random() < epsilon:
+            player_position = random.choice(positions)
+        else:
+            best_value = max(values.values())
+            best_positions = [
+                position for position in positions if values[position] == best_value
+            ]
+            player_position = random.choice(best_positions)
 
-def play_placement_game():
-    board = make_board()
-    unit_a = Unit("A")
-    unit_b = Unit("B")
+        env.reset()
+        _, _, _, _, info = env.step(action_for_position[player_position])
+        outcome = info["outcome"]
+        reward = {"A": 1.0, "draw": 0.5, "B": 0.0}[outcome]
 
-    r1 = random.randint(0, 2)
-    c1 = random.randint(0, 3)
-    board = place_a(board, unit_a, r1, c1)
+        counts[player_position] += 1
+        values[player_position] += (
+            reward - values[player_position]
+        ) / counts[player_position]
+        records[player_position][outcome] += 1
 
-    while True:
-        r2 = random.randint(0, 2)
-        c2 = random.randint(0, 3)
-        if can_place(board, r2, c2):
-            board = place_b(board, unit_b, r2, c2)
-            break
+        recent_rewards.append(reward)
+        learning_curve.append(sum(recent_rewards) / len(recent_rewards))
 
-    hp_a, hp_b = 100, 100
-    atk_a = random.uniform(15, 25)
-    armor_a = random.uniform(0, 50)
-    atk_b = random.uniform(15, 25)
-    armor_b = random.uniform(0, 50)
-
-    while hp_a > 0 and hp_b > 0:
-        damage_a_to_b = combat(board, atk_a, armor_b, r1, c1, r2, c2)
-        damage_b_to_a = combat(board, atk_b, armor_a, r2, c2, r1, c1)
-        hp_b -= damage_a_to_b
-        hp_a -= damage_b_to_a
-        if hp_a <= 0 and hp_b <= 0:
-            return "draw"
-        if hp_a <= 0:
-            return "B"
-        if hp_b <= 0:
-            return "A"
-    return "draw" if hp_a <= 0 and hp_b <= 0 else ("A" if hp_a > 0 else "B")
+    return values, counts, records, learning_curve
 
 
 if __name__ == "__main__":
-    wins = {"A": 0, "B": 0, "draw": 0}
-    for _ in range(1000):
-        winner = play_placement_game()
-        wins[winner] += 1
-    print(wins, f"A {wins['A']/10:.1f}% B {wins['B']/10:.1f}% draw {wins['draw']/10:.1f}%")
+    # Train the learner against the bot and summarize performance by starting cell.
+    import matplotlib.pyplot as plt
+
+    total_games = 5000
+    values, counts, records, learning_curve = train_position_learner(
+        total_games,
+        player_attack_range=PLAYER_ATTACK_RANGE,
+        bot_attack_range=BOT_ATTACK_RANGE,
+    )
+
+    print(
+        f"Bot fixed starting position: {BOT_START}; "
+        f"player range: {PLAYER_ATTACK_RANGE}; bot range: {BOT_ATTACK_RANGE}"
+    )
+    print("Position results (ranked by average reward: win=1, draw=0.5, loss=0):")
+    for position in sorted(values, key=values.get, reverse=True):
+        games_played = counts[position]
+        wins = records[position]["A"]
+        draws = records[position]["draw"]
+        print(
+            f"  {position}: reward={values[position]:.3f}, "
+            f"wins={wins / games_played:.1%}, draws={draws / games_played:.1%}, "
+            f"games={games_played}"
+        )   
+
+    best_position = max(values, key=values.get)
+    print(f"Learner's best starting position: {best_position}")
+
+    plt.plot(range(1, total_games + 1), learning_curve)
+    plt.xlabel("Games played")
+    plt.ylabel("Average reward (last 100 games)")
+    plt.title("Position learner's learning curve")
+    plt.ylim(0, 1)
+    plt.grid(True)
+    plt.show()

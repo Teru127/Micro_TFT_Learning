@@ -1,13 +1,26 @@
-from combat_spatial import spatial_damage
 import random
-wins_back = 0
-for _ in range(1000):
-    atk = random.uniform(15, 25)
-    armor = random.uniform(0, 50)
-    pos_x = random.randint(0, 2)
-    hp_back, hp_front = 100, 100
-    while hp_back > 0 and hp_front > 0:
-        hp_back -= spatial_damage(atk, armor, pos_x, 2)
-        hp_front -= spatial_damage(atk, armor, pos_x, 0)
-    if hp_back > 0: wins_back += 1  
-print(f"Back defender wins: {wins_back}/1000")
+import unittest
+
+from combat_spatial import position_factor, spatial_damage
+
+
+class SpatialCombatTests(unittest.TestCase):
+    def test_non_back_row_has_no_position_reduction(self):
+        self.assertEqual(position_factor(0, random.Random(7)), 1.0)
+        self.assertEqual(position_factor(1, random.Random(7)), 1.0)
+
+    def test_back_row_damage_is_reduced(self):
+        front_damage = spatial_damage(20, 10, 0, 1, random.Random(7))
+        back_damage = spatial_damage(20, 10, 0, 2, random.Random(7))
+
+        self.assertLess(back_damage, front_damage)
+
+    def test_back_row_randomness_is_seeded(self):
+        first = spatial_damage(20, 10, 0, 2, random.Random(23))
+        second = spatial_damage(20, 10, 0, 2, random.Random(23))
+
+        self.assertEqual(first, second)
+
+
+if __name__ == "__main__":
+    unittest.main()
