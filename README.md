@@ -18,7 +18,7 @@ env you write  ->  PPO / tabular RL  ->  self-play  ->  scaled TFT
 | 0 | Tabular Q-learning, Tic-Tac-Toe | done |
 | 1 | PPO on CartPole | done |
 | 2 | TinyArena, first custom Gym env | done |
-| 3 | Spatial board, positioning | done |
+| 3 | Spatial board, positioning | in progress |
 | 4 | Economy layer | planned |
 | 5 | Multi-agent self-play | planned |
 | 6 | Scale to full TFT | planned |
@@ -82,32 +82,55 @@ Training curve goes from `-0.2` to `8.3` over 100k steps.
 
 ---
 
-## Project 3: Spatial board, positioning matters
+## Project 3: Spatial board and positioning (in progress)
 
-Add a 3x4 board so **where you place** becomes the decision.
+The goal is to learn placement decisions that transfer across battle contexts, not only to prove that PPO can run on a custom environment.
 
 | File | Purpose |
 |---|---|
 | `board.py` | grid, `can_place`, immutable `place`, `print_board` |
-| `combat_spatial.py` | `spatial_damage` with a row factor (back row takes `0.85x` with jitter), injectable rng |
-| `env.py` | `TinyArenaEnv`, one placement action, full fight simulated in `step` |
-| `test_env.py` | Gym contract, seeding, reward mapping (5 tests) |
-| `ppo_pipeline_test.py` | PPO run plus brute-force per-cell oracle comparison |
-| `play_game.py` | standalone sim and tabular position learner |
+| `combat_spatial.py` | position-dependent damage with injectable RNG |
+| `env.py` | one placement action followed by a simulated fight |
+| `test_env.py` | Gym contract, same-process seeding, and reward mapping tests |
+| `ppo_pipeline_test.py` | PPO pipeline plus Monte Carlo per-cell estimates |
+| `play_game.py` | standalone simulation and bandit position learner |
 
-**Teaches:** state representation for spatial problems, why the signal must exist in the environment before an agent can exploit it, and how to validate a learned policy when ground truth is computable.
+### What the current code establishes
 
-**Verified:**
+* The board, placement, combat, and Gymnasium pipeline runs.
+* `check_env` and the environment tests pass.
+* The per-cell estimates are **brute-force Monte Carlo estimates**, not a tabular RL oracle.
+* PPO can train on this fixed setup.
 
-* Position matters. Back row wins **86.4%** vs front row with randomized stats (`864/1000`).
-* `check_env` passes, 5 env tests pass, and seeds reproduce identical fights.
-* **Oracle vs PPO.** With 300 paired-seed games per cell, the brute-force per-cell reward table is:
-  `(2,3) 0.427, (2,1) 0.427, (2,2) 0.400, (2,0) 0.320` then rows 0-1 around `0.29-0.31`, and all three distance-1 non-back cells tied at `0.080`.
-* PPO (20k steps) put `0.483` on `(2,3)`, `0.238` on `(2,1)`, `0.135` on `(2,2)`. **Its top 4 and bottom 3 match the oracle exactly**: it learned "back row, and stay away from the bot's range-1 reach."
+These are useful implementation checks. They are **not evidence that the agent has learned general TFT positioning**.
 
-**Note:** the episode is a single decision with a constant observation, so this env is effectively a bandit. The oracle solves it optimally; PPO's role was proving the env is Stable-Baselines3 compatible before Project 4.
+### One-step positioning is a valid task
 
-![PPO pipeline test curve](project3-spatial-board/ppo_pipeline_output/training_curve.png)
+A positioning environment does not need long-horizon planning to be useful. The reference paper *TFT Simulator: A Unified Single and Multi Agent Reinforcement Learning Environment* by Silver Lucoris describes both options in section 5.4:
+
+* one placement vector followed by combat, or
+* one unit move per step until all units are placed, followed by combat.
+
+The paper also makes clear that the one-step positioning target has no bootstrapped future-value term. Therefore, calling the current environment a bandit does not by itself invalidate it. It only limits what the result can claim to teach.
+
+### Why this version is not finished
+
+* The opponent is fixed at `(1, 2)`, only one friendly unit is controlled, and reset returns effectively the same observation each episode.
+* The agent can learn the best absolute cell for one fixed matchup instead of learning placement relative to varying boards.
+* Earlier cell rankings and PPO probabilities apply only to their specific configuration. They should not be generalized or treated as a discovery about TFT.
+* A range advantage is not kiting. The current movement rules close distance and do not implement retreat movement.
+* Same-process seeded tests do not establish exact reproducibility across NumPy versions or machines.
+
+### Remaining work before calling Project 3 done
+
+1. Sample different opponent positions or setups on reset so the observation and battle context vary.
+2. Control multiple friendly units, using either a placement vector or sequential unit moves with legal-placement handling.
+3. Resolve combat after placement and report wins, draws, and losses separately.
+4. Evaluate on held-out contexts with episode counts, seeds, mean and standard error, and a saved model.
+5. Compare against random and heuristic baselines, then inspect placements relative to the opponent rather than only absolute-cell frequencies.
+6. Add board invariants and a role-swapped mirror test.
+
+A graphical renderer is optional. It can help inspect behavior later, but it is not required for training or for completing this project.
 
 ---
 
